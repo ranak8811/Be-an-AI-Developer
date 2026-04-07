@@ -18,7 +18,7 @@ services:
       timeout: 5s
       retries: 5
 
-  # 2. FastAPI Application Service
+  # 2. FastAPI Application Service (Backend)
   api:
     build: .
     container_name: fastapi_app
@@ -27,11 +27,22 @@ services:
     env_file:
       - .env
     environment:
-      # Tell the app to connect to the 'db' container instead of 'localhost'
       DB_HOST: db
     depends_on:
       db:
         condition: service_healthy
+
+  # 3. Streamlit Application Service (Frontend)
+  frontend:
+    build: ./frontend
+    container_name: streamlit_app
+    ports:
+      - "8501:8501"
+    environment:
+      # Tell the frontend that it is running inside Docker
+      DOCKER: "true"
+    depends_on:
+      - api
 
 volumes:
   postgres_data:
