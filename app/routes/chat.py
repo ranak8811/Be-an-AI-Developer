@@ -2,6 +2,7 @@ from fastapi import APIRouter, HTTPException
 from app.models.schemas import ChatRequest, ChatResponse, HistoryResponse, MessageHistory, HealthResponse
 from app.services.memory import add_message, get_history, clear_history
 from app.services.ai import generate_ai_response
+from app.config import settings
 
 # Create a router instance to organize our endpoints
 router = APIRouter()
@@ -11,7 +12,7 @@ async def chat_endpoint(request: ChatRequest):
     """
     Main chat endpoint. 
     1. Saves the user's message to the database.
-    2. Retrieves previous chat history for the session.
+    2. Retrieves previous chat history for the session (Limited to MAX_HISTORY_MESSAGES).
     3. Sends history + new message to Gemini.
     4. Saves Gemini's response to the database.
     5. Returns the response to the user.
@@ -20,13 +21,12 @@ async def chat_endpoint(request: ChatRequest):
         # 1. Save user message
         add_message(request.session_id, "user", request.message)
         
-        # 2. Get history (to provide context to the AI)
-        history = get_history(request.session_id)
+        # 2. Get history (to provide context to the AI, limited to keep it efficient)
+        history = get_history(request.session_id, limit=settings.MAX_HISTORY_MESSAGES)
         
         # 3. Generate response from Gemini
         # We pass the history we just got (which includes the user message we just added)
-        # Note: In our current logic, we'll pass the history *excluding* the last message
-        # as history_context, and pass the last message separately.
+        # We pass history *excluding* the last message as context
         history_context = history[:-1] if history else []
         ai_reply = generate_ai_response(history_context, request.message)
         

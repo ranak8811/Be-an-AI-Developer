@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, DateTime, Text, asc
+from sqlalchemy import create_engine, Column, Integer, String, DateTime, Text, asc, desc
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from datetime import datetime
@@ -44,15 +44,23 @@ def add_message(session_id: str, role: str, content: str):
     finally:
         db.close()
 
-def get_history(session_id: str):
+def get_history(session_id: str, limit: int = None):
     """
     Retrieves the full, ordered history for a specific session.
+    If limit is provided, only the last 'limit' messages are returned.
     """
     db = SessionLocal()
     try:
-        # We order by timestamp so the AI receives messages in the correct sequence
-        messages = db.query(ChatHistory).filter(ChatHistory.session_id == session_id).order_by(asc(ChatHistory.timestamp)).all()
-        return messages
+        query = db.query(ChatHistory).filter(ChatHistory.session_id == session_id)
+        
+        if limit:
+            # We get the most recent 'limit' messages by sorting by timestamp descending
+            messages = query.order_by(desc(ChatHistory.timestamp)).limit(limit).all()
+            # Then we reverse the list back to chronological order (oldest to newest)
+            return sorted(messages, key=lambda x: x.timestamp)
+        
+        # Default: return all in chronological order
+        return query.order_by(asc(ChatHistory.timestamp)).all()
     finally:
         db.close()
 

@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     # LLM Configuration
     GEMINI_API_KEY: str
 
+    # Chat Configuration
+    MAX_HISTORY_MESSAGES: int = 2
+
     # App Settings
     APP_NAME: str = "AI Chatbot"
 
