@@ -1,50 +1,47 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from app.models.schemas import ChatRequest, ChatResponse, HistoryResponse, MessageHistory, HealthResponse
 from app.services.memory import add_message, get_history, clear_history
 from app.services.ai import generate_ai_response
 from app.config import settings
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
-# Create a router instance to organize our endpoints
+# Create a router instance
 router = APIRouter()
+limiter = Limiter(key_func=get_remote_address)
 
 @router.post("/chat", response_model=ChatResponse)
-async def chat_endpoint(request: ChatRequest):
+@limiter.limit("5/minute")
+async def chat_endpoint(request_data: ChatRequest, request: Request):
     """
-    Main chat endpoint. 
-    1. Saves the user's message to the database.
-    2. Retrieves previous chat history for the session (Limited to MAX_HISTORY_MESSAGES).
-    3. Sends history + new message to Gemini.
-    4. Saves Gemini's response to the database.
-    5. Returns the response to the user.
+    Main chat endpoint with a rate limit of 5 requests per minute.
     """
     try:
         # 1. Save user message
-        add_message(request.session_id, "user", request.message)
+        add_message(request_data.session_id, "user", request_data.message)
         
         # 2. Get history (to provide context to the AI, limited to keep it efficient)
-        history = get_history(request.session_id, limit=settings.MAX_HISTORY_MESSAGES)
+        history = get_history(request_data.session_id, limit=settings.MAX_HISTORY_MESSAGES)
         
         # 3. Generate response from Gemini
-        # We pass the history we just got (which includes the user message we just added)
-        # We pass history *excluding* the last message as context
         history_context = history[:-1] if history else []
-        ai_reply = generate_ai_response(history_context, request.message)
+        ai_reply = generate_ai_response(history_context, request_data.message)
         
         # 4. Save AI's response
-        add_message(request.session_id, "assistant", ai_reply)
+        add_message(request_data.session_id, "assistant", ai_reply)
         
         return ChatResponse(reply=ai_reply)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/history/{session_id}", response_model=HistoryResponse)
-async def get_history_endpoint(session_id: str):
+@limiter.limit("10/minute")
+async def get_history_endpoint(session_id: str, request: Request):
     """
-    Retrieves the full chat history for a specific session.
+    Retrieves history with a rate limit of 10 requests per minute.
     """
     try:
         history_objs = get_history(session_id)
-        # Convert SQLAlchemy objects to our Pydantic MessageHistory model
         formatted_history = [
             MessageHistory(role=msg.role, content=msg.content) 
             for msg in history_objs
