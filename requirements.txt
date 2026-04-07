@@ -8,3 +8,5 @@ pydantic
 pydantic-settings
 streamlit
 requests
+pytest
+httpx
